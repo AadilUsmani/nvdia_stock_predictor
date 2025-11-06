@@ -19,12 +19,14 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>()
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
-const API_CALL_DELAY = 1000 // 1 second between API calls to respect rate limits
+const API_CALL_DELAY = 500 // 500ms between API calls to respect rate limits
 
 // Rate limiting (in-memory, per serverless function invocation)
 let lastApiCall = 0
 let apiCallCount = 0
 const MAX_CALLS_PER_MINUTE = 5
+const API_CALL_TIMEOUT = 8000 // 8 second timeout per API call
+const TOTAL_REQUEST_TIMEOUT = 15000 // 15 second total timeout for all providers
 
 // Utility function to add delay between API calls
 async function rateLimitedFetch(url: string, options?: RequestInit): Promise<Response> {
@@ -52,13 +54,26 @@ async function rateLimitedFetch(url: string, options?: RequestInit): Promise<Res
   lastApiCall = Date.now()
   apiCallCount++
 
-  return fetch(url, options)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), API_CALL_TIMEOUT)
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal })
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 // Exponential backoff retry mechanism
-async function fetchWithRetry(url: string, options?: RequestInit, retries = 3, delay = 1000): Promise<Response> {
+async function fetchWithRetry(url: string, options?: RequestInit, retries = 2, delay = 800): Promise<Response> {
   try {
     const response = await rateLimitedFetch(url, options)
+
+    // Fail fast on permission errors and not found - these won't be fixed by retrying
+    if (response.status === 403 || response.status === 404) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+
     if (!response.ok && response.status === 429) {
       throw new Error("Rate limited")
     }
@@ -68,7 +83,7 @@ async function fetchWithRetry(url: string, options?: RequestInit, retries = 3, d
 
     console.warn(`API call failed, retrying in ${delay}ms... (${retries} retries left)`)
     await new Promise((resolve) => setTimeout(resolve, delay))
-    return fetchWithRetry(url, options, retries - 1, delay * 2)
+    return fetchWithRetry(url, options, retries - 1, delay * 1.5)
   }
 }
 
@@ -278,6 +293,7 @@ function generateMockData(): StockPrice {
 
 // Main function with multiple provider fallback
 export async function fetchNVIDIAStockServer(): Promise<StockPrice> {
+  const startTime = Date.now()
   const providers = [
     { name: "Finnhub", fetch: fetchFromFinnhub },
     { name: "Alpha Vantage", fetch: fetchFromAlphaVantage },
@@ -286,6 +302,11 @@ export async function fetchNVIDIAStockServer(): Promise<StockPrice> {
 
   for (const provider of providers) {
     try {
+      if (Date.now() - startTime > TOTAL_REQUEST_TIMEOUT) {
+        console.warn("Total request timeout exceeded, using mock data")
+        break
+      }
+
       console.log(`Attempting to fetch from ${provider.name}...`)
       const result = await provider.fetch()
       console.log(`✅ Successfully fetched from ${provider.name}`)
@@ -334,76 +355,56 @@ function generateMockHistoricalData(days: number, referencePrice: number): Histo
 
 // Enhanced historical data fetching
 export async function fetchHistoricalDataServer(days = 30, currentPrice?: number): Promise<HistoricalData[]> {
+  const startTime = Date.now()
   const cacheKey = `historical-${days}-${currentPrice || "no-ref"}` // Include currentPrice in cache key
   const cached = getCachedData(cacheKey)
   if (cached) return cached
 
-  // Try Finnhub first for historical data
-  if (FINNHUB_API_KEY) {
-    try {
-      console.log("Fetching historical data from Finnhub...")
-
-      const to = Math.floor(Date.now() / 1000)
-      const from = to - days * 24 * 60 * 60
-
-      const response = await fetchWithRetry(
-        `${FINNHUB_BASE_URL}/stock/candle?symbol=NVDA&resolution=D&from=${from}&to=${to}&token=${FINNHUB_API_KEY}`,
-      )
-      const data = await response.json()
-
-      if (data.s === "ok" && data.c && data.c.length > 0) {
-        const historicalData: HistoricalData[] = data.t.map((timestamp: number, index: number) => ({
-          date: new Date(timestamp * 1000).toISOString().split("T")[0],
-          open: Math.round(data.o[index] * 100) / 100,
-          high: Math.round(data.h[index] * 100) / 100,
-          low: Math.round(data.l[index] * 100) / 100,
-          close: Math.round(data.c[index] * 100) / 100,
-          volume: data.v[index],
-        }))
-
-        setCachedData(cacheKey, historicalData, "Finnhub")
-        return historicalData
-      }
-    } catch (error) {
-      console.warn("Finnhub historical data failed:", (error as Error).message)
-    }
-  }
-
   // Try Alpha Vantage for historical data
   if (ALPHA_VANTAGE_API_KEY) {
     try {
-      console.log("Fetching historical data from Alpha Vantage...")
+      if (Date.now() - startTime > TOTAL_REQUEST_TIMEOUT * 0.6) {
+        console.warn("Timeout threshold reached for historical data, skipping Alpha Vantage")
+      } else {
+        console.log("Fetching historical data from Alpha Vantage...")
 
-      const response = await fetchWithRetry(
-        `${ALPHA_VANTAGE_BASE_URL}?function=TIME_SERIES_DAILY&symbol=NVDA&apikey=${ALPHA_VANTAGE_API_KEY}`,
-      )
-      const data = await response.json()
+        const response = await fetchWithRetry(
+          `${ALPHA_VANTAGE_BASE_URL}?function=TIME_SERIES_DAILY&symbol=NVDA&apikey=${ALPHA_VANTAGE_API_KEY}`,
+        )
+        const data = await response.json()
 
-      if (data["Time Series (Daily)"]) {
-        const timeSeries = data["Time Series (Daily)"]
-        const historicalData: HistoricalData[] = Object.entries(timeSeries)
-          .slice(0, days)
-          .map(([date, values]: [string, any]) => ({
-            date,
-            open: Number.parseFloat(values["1. open"]),
-            high: Number.parseFloat(values["2. high"]),
-            low: Number.parseFloat(values["3. low"]),
-            close: Number.parseFloat(values["4. close"]),
-            volume: Number.parseInt(values["5. volume"]),
-          }))
-          .reverse()
+        if (data["Time Series (Daily)"]) {
+          const timeSeries = data["Time Series (Daily)"]
+          const historicalData: HistoricalData[] = Object.entries(timeSeries)
+            .slice(0, days)
+            .map(([date, values]: [string, any]) => ({
+              date,
+              open: Number.parseFloat(values["1. open"]),
+              high: Number.parseFloat(values["2. high"]),
+              low: Number.parseFloat(values["3. low"]),
+              close: Number.parseFloat(values["4. close"]),
+              volume: Number.parseInt(values["5. volume"]),
+            }))
+            .reverse()
 
-        setCachedData(cacheKey, historicalData, "Alpha Vantage")
-        return historicalData
+          setCachedData(cacheKey, historicalData, "Alpha Vantage")
+          console.log(`✅ Successfully fetched ${historicalData.length} days of historical data from Alpha Vantage`)
+          return historicalData
+        } else {
+          throw new Error("Alpha Vantage returned empty or malformed data")
+        }
       }
     } catch (error) {
-      console.warn("Alpha Vantage historical data failed:", (error as Error).message)
+      console.warn(`❌ Alpha Vantage historical data failed:`, (error as Error).message)
+      // Continue to mock data generation
     }
   }
 
   // Generate mock historical data as final fallback, using currentPrice if available
   console.log("Generating mock historical data as final fallback...")
-  return generateMockHistoricalData(days, currentPrice || 875) // Fallback to 875 if currentPrice is not provided
+  const mockData = generateMockHistoricalData(days, currentPrice || 875)
+  setCachedData(cacheKey, mockData, "Mock Data")
+  return mockData
 }
 
 export async function GET(request: Request) {

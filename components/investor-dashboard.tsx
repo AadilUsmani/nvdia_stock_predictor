@@ -3,11 +3,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Download, TrendingUp, AlertCircle, Target, Shield } from "lucide-react"
+import { TrendingUp, AlertCircle, Target, Shield } from "@/components/icons"
 import { StockChart } from "@/components/stock-chart"
 import type { StockAnalysis } from "@/hooks/use-stock-data"
 import { APIStatusPanel } from "@/components/api-status-panel"
-import { generatePDFReport, generateChartPDF } from "@/lib/pdf-generator"
 
 interface InvestorDashboardProps {
   stockAnalysis: StockAnalysis
@@ -18,32 +17,6 @@ export function InvestorDashboard({ stockAnalysis }: InvestorDashboardProps) {
 
   if (!stockPrice || !predictions || !recommendation) {
     return <div>Loading analysis...</div>
-  }
-
-  const handleDownloadPDF = async () => {
-    try {
-      await generatePDFReport({
-        stockAnalysis,
-        reportType: "investor",
-        userRole: "Investor",
-      })
-    } catch (error) {
-      console.error("PDF generation failed:", error)
-      alert("Failed to generate PDF report. Please try again.")
-    }
-  }
-
-  const handleDownloadChartPDF = async () => {
-    try {
-      await generateChartPDF("stock-chart", {
-        stockAnalysis,
-        reportType: "investor",
-        userRole: "Investor",
-      })
-    } catch (error) {
-      console.error("Chart PDF generation failed:", error)
-      alert("Failed to generate chart PDF. Please try again.")
-    }
   }
 
   const getRecommendationColor = (action: string) => {
@@ -266,17 +239,6 @@ export function InvestorDashboard({ stockAnalysis }: InvestorDashboardProps) {
                   </div>
                 </div>
               )}
-            </div>
-
-            <div className="pt-4 border-t dark:border-gray-700 flex flex-col md:flex-row gap-4">
-              <Button onClick={handleDownloadPDF} className="flex-1">
-                <Download className="h-4 w-4 mr-2" />
-                Download Investment Report (PDF)
-              </Button>
-              <Button onClick={handleDownloadChartPDF} variant="outline" className="flex-1 bg-transparent">
-                <Download className="h-4 w-4 mr-2" />
-                Download Chart Analysis (PDF)
-              </Button>
             </div>
           </CardContent>
         </Card>

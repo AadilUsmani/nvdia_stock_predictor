@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { TrendingUp, Download, BarChart3, Briefcase, Globe, ArrowUp, ArrowDown, RefreshCw } from "lucide-react"
+import { TrendingUp, Download, BarChart3, Briefcase, Globe, ArrowUp, ArrowDown, RefreshCw } from "@/components/icons"
 import { InvestorDashboard } from "@/components/investor-dashboard"
 import { DataScientistDashboard } from "@/components/data-scientist-dashboard"
 import { FinancialAdvisorDashboard } from "@/components/financial-advisor-dashboard"

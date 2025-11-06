@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { checkAPIHealthServer, getAPIUsageStatsServer } from "@/app/actions/api-status"
-import { RefreshCw, CheckCircle, XCircle, AlertCircle } from "lucide-react"
+import { RefreshCw, CheckCircle, XCircle, AlertCircle } from "@/components/icons"
 
 export function APIStatusPanel() {
   const [apiHealth, setApiHealth] = useState<any>(null)
