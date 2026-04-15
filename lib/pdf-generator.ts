@@ -11,188 +11,152 @@ export interface PDFReportData {
 // Generate PDF report based on current stock analysis
 export async function generatePDFReport(data: PDFReportData): Promise<void> {
   const { stockAnalysis, reportType, userRole } = data
-  const { stockPrice, predictions, recommendation, technicalAnalysis, riskAssessment } = stockAnalysis
+  const { stockPrice, predictions, recommendation, technicalAnalysis, riskAssessment, historicalData } = stockAnalysis
 
   if (!stockPrice || !predictions) {
     throw new Error("Insufficient data for PDF generation")
   }
 
-  const pdf = new jsPDF()
+  const pdf = new jsPDF({ unit: "mm", format: "a4" })
   const pageWidth = pdf.internal.pageSize.getWidth()
   const pageHeight = pdf.internal.pageSize.getHeight()
-  let yPosition = 20
+  const marginX = 15
+  const maxWidth = pageWidth - marginX * 2
+  const bottomMargin = 15
+  let yPosition = 18
 
-  // Helper function to add text with word wrapping
-  const addText = (text: string, x: number, y: number, maxWidth?: number, fontSize = 12) => {
-    pdf.setFontSize(fontSize)
-    if (maxWidth) {
-      const lines = pdf.splitTextToSize(text, maxWidth)
-      pdf.text(lines, x, y)
-      return y + lines.length * (fontSize * 0.4)
-    } else {
-      pdf.text(text, x, y)
-      return y + fontSize * 0.4
+  const formatCurrency = (value: number) =>
+    `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const formatPercent = (value: number) => `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`
+  const sectionTitle: Record<PDFReportData["reportType"], string> = {
+    investor: "Investor Report",
+    "data-scientist": "Data Scientist Report",
+    "financial-advisor": "Financial Advisor Report",
+    general: "General Market Report",
+  }
+
+  const ensureSpace = (requiredHeight = 8) => {
+    if (yPosition + requiredHeight > pageHeight - bottomMargin) {
+      pdf.addPage()
+      yPosition = 18
     }
   }
 
-  // Header
-  pdf.setFontSize(20)
-  pdf.setFont("helvetica", "bold")
-  pdf.text("NVIDIA Stock Analysis Report", pageWidth / 2, yPosition, { align: "center" })
-  yPosition += 15
+  const writeWrappedText = (text: string, fontSize = 11, style: "normal" | "bold" | "italic" = "normal", indent = 0) => {
+    pdf.setFont("helvetica", style)
+    pdf.setFontSize(fontSize)
+    const lines = pdf.splitTextToSize(text, maxWidth - indent)
+    ensureSpace(lines.length * (fontSize * 0.5) + 4)
+    pdf.text(lines, marginX + indent, yPosition)
+    yPosition += lines.length * (fontSize * 0.5) + 2
+  }
 
-  pdf.setFontSize(14)
-  pdf.setFont("helvetica", "normal")
-  pdf.text(`${userRole} Dashboard`, pageWidth / 2, yPosition, { align: "center" })
-  yPosition += 10
-
-  pdf.setFontSize(10)
-  pdf.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, yPosition, { align: "center" })
-  pdf.text(`Data Source: ${stockPrice.source}`, pageWidth / 2, yPosition + 5, { align: "center" })
-  yPosition += 20
-
-  // Current Stock Information
-  pdf.setFontSize(16)
-  pdf.setFont("helvetica", "bold")
-  yPosition = addText("Current Stock Information", 20, yPosition, undefined, 16)
-  yPosition += 5
-
-  pdf.setFontSize(12)
-  pdf.setFont("helvetica", "normal")
-  yPosition = addText(`Symbol: ${stockPrice.symbol}`, 20, yPosition)
-  yPosition = addText(`Current Price: $${stockPrice.price}`, 20, yPosition)
-  yPosition = addText(
-    `Change: ${stockPrice.change >= 0 ? "+" : ""}$${stockPrice.change} (${stockPrice.change >= 0 ? "+" : ""}${stockPrice.changePercent}%)`,
-    20,
-    yPosition,
-  )
-  yPosition = addText(`Previous Close: $${stockPrice.previousClose}`, 20, yPosition)
-  yPosition = addText(`Volume: ${stockPrice.volume.toLocaleString()}`, 20, yPosition)
-  yPosition += 10
-
-  // Predictions
-  pdf.setFontSize(16)
-  pdf.setFont("helvetica", "bold")
-  yPosition = addText("AI Price Predictions", 20, yPosition, undefined, 16)
-  yPosition += 5
-
-  pdf.setFontSize(12)
-  pdf.setFont("helvetica", "normal")
-  yPosition = addText(
-    `1-Day Prediction: $${predictions.day1} (${predictions.confidence.day1}% confidence)`,
-    20,
-    yPosition,
-  )
-  yPosition = addText(
-    `5-Day Prediction: $${predictions.day5} (${predictions.confidence.day5}% confidence)`,
-    20,
-    yPosition,
-  )
-  yPosition = addText(
-    `10-Day Prediction: $${predictions.day10} (${predictions.confidence.day10}% confidence)`,
-    20,
-    yPosition,
-  )
-  yPosition += 10
-
-  // Role-specific content
-  if (reportType === "investor" && recommendation) {
-    pdf.setFontSize(16)
+  const writeHeader = () => {
     pdf.setFont("helvetica", "bold")
-    yPosition = addText("Investment Recommendation", 20, yPosition, undefined, 16)
-    yPosition += 5
+    pdf.setFontSize(20)
+    pdf.text("NVIDIA Stock Analysis Report", pageWidth / 2, yPosition, { align: "center" })
+    yPosition += 8
 
-    pdf.setFontSize(12)
     pdf.setFont("helvetica", "normal")
-    yPosition = addText(`Recommendation: ${recommendation.action}`, 20, yPosition)
-    yPosition = addText(`Confidence: ${recommendation.confidence}%`, 20, yPosition)
-    yPosition = addText(`Target Price: $${recommendation.targetPrice}`, 20, yPosition)
-    yPosition = addText(`Stop Loss: $${recommendation.stopLoss}`, 20, yPosition)
+    pdf.setFontSize(12)
+    pdf.text(sectionTitle[reportType], pageWidth / 2, yPosition, { align: "center" })
+    yPosition += 6
+    pdf.text(`Prepared for: ${userRole}`, pageWidth / 2, yPosition, { align: "center" })
     yPosition += 5
+    pdf.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, yPosition, { align: "center" })
+    yPosition += 10
+  }
 
-    yPosition = addText("Analysis Reasoning:", 20, yPosition)
-    recommendation.reasoning.forEach((reason) => {
-      yPosition = addText(`• ${reason}`, 25, yPosition, pageWidth - 50)
+  writeHeader()
+
+  writeWrappedText("Market Snapshot", 14, "bold")
+  writeWrappedText(`- Symbol: ${stockPrice.symbol}`)
+  writeWrappedText(`- Current Price: ${formatCurrency(stockPrice.price)}`)
+  writeWrappedText(`- Change: ${formatCurrency(stockPrice.change)} (${formatPercent(stockPrice.changePercent)})`)
+  writeWrappedText(`- Previous Close: ${formatCurrency(stockPrice.previousClose)}`)
+  writeWrappedText(`- Volume: ${stockPrice.volume.toLocaleString()}`)
+  writeWrappedText(`- Data Source: ${stockPrice.source}`)
+  yPosition += 2
+
+  writeWrappedText("AI Price Predictions", 14, "bold")
+  writeWrappedText(`- 1-Day: ${formatCurrency(predictions.day1)} (confidence: ${predictions.confidence.day1}%)`)
+  writeWrappedText(`- 5-Day: ${formatCurrency(predictions.day5)} (confidence: ${predictions.confidence.day5}%)`)
+  writeWrappedText(`- 10-Day: ${formatCurrency(predictions.day10)} (confidence: ${predictions.confidence.day10}%)`)
+  yPosition += 2
+
+  if (reportType === "investor") {
+    writeWrappedText("Investment Recommendation", 14, "bold")
+    if (recommendation) {
+      writeWrappedText(`- Action: ${recommendation.action}`)
+      writeWrappedText(`- Confidence: ${recommendation.confidence}%`)
+      writeWrappedText(`- Target Price: ${formatCurrency(recommendation.targetPrice)}`)
+      writeWrappedText(`- Stop Loss: ${formatCurrency(recommendation.stopLoss)}`)
+      writeWrappedText("Reasoning:", 11, "bold")
+      recommendation.reasoning.forEach((reason) => writeWrappedText(`- ${reason}`, 11, "normal", 3))
+    } else {
+      writeWrappedText("Recommendation data is unavailable for this report.")
+    }
+    yPosition += 2
+  }
+
+  if (reportType === "financial-advisor") {
+    writeWrappedText("Risk Assessment", 14, "bold")
+    if (riskAssessment) {
+      writeWrappedText(`- Risk Score: ${riskAssessment.score.toFixed(1)}/10`)
+      writeWrappedText(`- Volatility: ${(riskAssessment.volatility * 100).toFixed(1)}%`)
+      writeWrappedText(`- Beta: ${riskAssessment.beta}`)
+      writeWrappedText(`- Sharpe Ratio: ${riskAssessment.sharpeRatio}`)
+      writeWrappedText(`- Max Drawdown: ${(riskAssessment.maxDrawdown * 100).toFixed(1)}%`)
+    } else {
+      writeWrappedText("Risk assessment data is unavailable for this report.")
+    }
+    yPosition += 2
+  }
+
+  if (reportType === "data-scientist") {
+    writeWrappedText("Technical Analysis", 14, "bold")
+    if (technicalAnalysis) {
+      writeWrappedText(`- RSI (14): ${technicalAnalysis.rsi.toFixed(1)}`)
+      writeWrappedText(`- MACD: ${technicalAnalysis.macd.toFixed(2)}`)
+      writeWrappedText(`- 20-day SMA: ${formatCurrency(technicalAnalysis.sma20)}`)
+      writeWrappedText(`- 50-day SMA: ${formatCurrency(technicalAnalysis.sma50)}`)
+      writeWrappedText(`- Support Level: ${formatCurrency(technicalAnalysis.support)}`)
+      writeWrappedText(`- Resistance Level: ${formatCurrency(technicalAnalysis.resistance)}`)
+    } else {
+      writeWrappedText("Technical analysis data is unavailable for this report.")
+    }
+    yPosition += 2
+  }
+
+  if (reportType === "general") {
+    writeWrappedText("General Summary", 14, "bold")
+    writeWrappedText(
+      `NVIDIA is currently trading at ${formatCurrency(stockPrice.price)} with a daily move of ${formatPercent(stockPrice.changePercent)}.`,
+    )
+    writeWrappedText(
+      `Near-term model output suggests ${formatCurrency(predictions.day1)} (1 day), ${formatCurrency(predictions.day5)} (5 day), and ${formatCurrency(predictions.day10)} (10 day).`,
+    )
+    yPosition += 2
+  }
+
+  if (historicalData.length > 0) {
+    writeWrappedText("Recent Historical Data", 14, "bold")
+    writeWrappedText(`- Total data points: ${historicalData.length}`)
+    historicalData.slice(-5).forEach((day) => {
+      writeWrappedText(`- ${day.date}: Close ${formatCurrency(day.close)} | Volume ${day.volume.toLocaleString()}`, 10)
     })
-    yPosition += 10
   }
 
-  if (reportType === "financial-advisor" && riskAssessment) {
-    pdf.setFontSize(16)
-    pdf.setFont("helvetica", "bold")
-    yPosition = addText("Risk Assessment", 20, yPosition, undefined, 16)
-    yPosition += 5
-
-    pdf.setFontSize(12)
-    pdf.setFont("helvetica", "normal")
-    yPosition = addText(`Risk Score: ${riskAssessment.score.toFixed(1)}/10`, 20, yPosition)
-    yPosition = addText(`Volatility: ${(riskAssessment.volatility * 100).toFixed(1)}%`, 20, yPosition)
-    yPosition = addText(`Beta: ${riskAssessment.beta}`, 20, yPosition)
-    yPosition = addText(`Sharpe Ratio: ${riskAssessment.sharpeRatio}`, 20, yPosition)
-    yPosition = addText(`Max Drawdown: ${(riskAssessment.maxDrawdown * 100).toFixed(1)}%`, 20, yPosition)
-    yPosition += 10
-  }
-
-  if (reportType === "data-scientist" && technicalAnalysis) {
-    pdf.setFontSize(16)
-    pdf.setFont("helvetica", "bold")
-    yPosition = addText("Technical Analysis", 20, yPosition, undefined, 16)
-    yPosition += 5
-
-    pdf.setFontSize(12)
-    pdf.setFont("helvetica", "normal")
-    yPosition = addText(`RSI (14): ${technicalAnalysis.rsi.toFixed(1)}`, 20, yPosition)
-    yPosition = addText(`MACD: ${technicalAnalysis.macd.toFixed(2)}`, 20, yPosition)
-    yPosition = addText(`20-day SMA: $${technicalAnalysis.sma20}`, 20, yPosition)
-    yPosition = addText(`50-day SMA: $${technicalAnalysis.sma50}`, 20, yPosition)
-    yPosition = addText(`Support Level: $${technicalAnalysis.support}`, 20, yPosition)
-    yPosition = addText(`Resistance Level: $${technicalAnalysis.resistance}`, 20, yPosition)
-    yPosition += 10
-  }
-
-  // Add new page if needed
-  if (yPosition > pageHeight - 40) {
-    pdf.addPage()
-    yPosition = 20
-  }
-
-  // Historical Data Summary
-  if (stockAnalysis.historicalData.length > 0) {
-    pdf.setFontSize(16)
-    pdf.setFont("helvetica", "bold")
-    yPosition = addText("Historical Data Summary", 20, yPosition, undefined, 16)
-    yPosition += 5
-
-    pdf.setFontSize(12)
-    pdf.setFont("helvetica", "normal")
-    yPosition = addText(`Data Points: ${stockAnalysis.historicalData.length}`, 20, yPosition)
-
-    const recentData = stockAnalysis.historicalData.slice(-5)
-    yPosition = addText("Recent 5-Day Performance:", 20, yPosition)
-
-    recentData.forEach((day) => {
-      yPosition = addText(`${day.date}: $${day.close} (Vol: ${day.volume.toLocaleString()})`, 25, yPosition)
-    })
-    yPosition += 10
-  }
-
-  // Footer
-  pdf.setFontSize(8)
+  ensureSpace(10)
   pdf.setFont("helvetica", "italic")
+  pdf.setFontSize(8)
   pdf.text(
-    "Disclaimer: This report is for informational purposes only and should not be considered as financial advice.",
+    "Disclaimer: This report is for informational purposes only and is not financial advice.",
     pageWidth / 2,
-    pageHeight - 20,
-    { align: "center" },
-  )
-  pdf.text(
-    "Please consult with a qualified financial advisor before making investment decisions.",
-    pageWidth / 2,
-    pageHeight - 15,
+    pageHeight - 10,
     { align: "center" },
   )
 
-  // Save the PDF
   const fileName = `NVDA_${reportType}_report_${new Date().toISOString().split("T")[0]}.pdf`
   pdf.save(fileName)
 }
