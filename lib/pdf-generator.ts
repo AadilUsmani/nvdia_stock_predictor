@@ -1,4 +1,6 @@
-import jsPDF from "jspdf"
+"use client"
+
+import { jsPDF } from "jspdf"
 import html2canvas from "html2canvas"
 import type { StockAnalysis } from "@/hooks/use-stock-data"
 
