@@ -8,6 +8,7 @@ import { Download, Shield, TrendingUp, AlertTriangle, Users } from "lucide-react
 import { StockChart } from "@/components/stock-chart"
 import { APIStatusPanel } from "@/components/api-status-panel"
 import type { StockAnalysis } from "@/hooks/use-stock-data"
+import { generatePDFReport, type PDFReportData } from "@/lib/pdf-generator"
 
 interface FinancialAdvisorDashboardProps {
   stockAnalysis: StockAnalysis
@@ -23,9 +24,19 @@ export function FinancialAdvisorDashboard({ stockAnalysis }: FinancialAdvisorDas
   // Calculate S&P 500 comparison (in a real app, this would come from API)
   const sp500Comparison = 2.3 // Percentage outperformance
 
-  const handleDownloadReport = (type: string) => {
-    // In a real app, this would generate and download a PDF report
-    alert(`${type} report would be downloaded here`)
+  const handleDownloadReport = async (type: "Executive Summary" | "Detailed Analysis" | "Risk Assessment") => {
+    const reportTypeMap: Record<"Executive Summary" | "Detailed Analysis" | "Risk Assessment", PDFReportData["reportType"]> =
+      {
+        "Executive Summary": "financial-advisor",
+        "Detailed Analysis": "data-scientist",
+        "Risk Assessment": "financial-advisor",
+      }
+
+    await generatePDFReport({
+      stockAnalysis,
+      reportType: reportTypeMap[type],
+      userRole: "Financial Advisor",
+    })
   }
 
   return (
