@@ -20,9 +20,17 @@ export function GeneralUserDashboard({ stockAnalysis }: GeneralUserDashboardProp
     return <div>Loading analysis...</div>
   }
 
-  const handleDownloadSummary = () => {
-    // In a real app, this would generate and download a PDF report
-    alert("Summary report would be downloaded here")
+  const handleDownloadSummary = async () => {
+    try {
+      await generatePDFReport({
+        stockAnalysis,
+        reportType: "general",
+        userRole: "General User"
+      })
+    } catch (error) {
+      console.error("Failed to generate PDF:", error)
+      alert("Unable to generate report. Please ensure data has finished loading.")
+    }
   }
 
   const isPositiveTrend = stockPrice.change >= 0
