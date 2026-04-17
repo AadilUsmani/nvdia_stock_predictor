@@ -115,21 +115,32 @@ export async function generatePDFReport(data: PDFReportData): Promise<void> {
     yPosition += 2
   }
 
-  if (reportType === "data-scientist") {
+ if (reportType === "data-scientist") {
     writeWrappedText("Technical Analysis", 14, "bold")
     if (technicalAnalysis) {
-      writeWrappedText(`- RSI (14): ${technicalAnalysis.rsi.toFixed(1)}`)
-      writeWrappedText(`- MACD: ${technicalAnalysis.macd.toFixed(2)}`)
-      writeWrappedText(`- 20-day SMA: ${formatCurrency(technicalAnalysis.sma20)}`)
-      writeWrappedText(`- 50-day SMA: ${formatCurrency(technicalAnalysis.sma50)}`)
-      writeWrappedText(`- Support Level: ${formatCurrency(technicalAnalysis.support)}`)
-      writeWrappedText(`- Resistance Level: ${formatCurrency(technicalAnalysis.resistance)}`)
+      // Add optional chaining (?.) and nullish coalescing (??) to prevent fatal errors
+      writeWrappedText(`- RSI (14): ${technicalAnalysis.rsi?.toFixed(1) ?? 'N/A'}`)
+      writeWrappedText(`- MACD: ${technicalAnalysis.macd?.toFixed(2) ?? 'N/A'}`)
+      writeWrappedText(`- 20-day SMA: ${technicalAnalysis.sma20 ? formatCurrency(technicalAnalysis.sma20) : 'N/A'}`)
+      writeWrappedText(`- 50-day SMA: ${technicalAnalysis.sma50 ? formatCurrency(technicalAnalysis.sma50) : 'N/A'}`)
+      writeWrappedText(`- Support Level: ${technicalAnalysis.support ? formatCurrency(technicalAnalysis.support) : 'N/A'}`)
+      writeWrappedText(`- Resistance Level: ${technicalAnalysis.resistance ? formatCurrency(technicalAnalysis.resistance) : 'N/A'}`)
     } else {
       writeWrappedText("Technical analysis data is unavailable for this report.")
     }
     yPosition += 2
   }
 
+  // ... skip to the bottom ...
+
+  // Safely check if historicalData exists BEFORE checking its length
+ if (historicalData && historicalData.length > 0) {
+    writeWrappedText("Recent Historical Data", 14, "bold")
+    writeWrappedText(`- Total data points: ${historicalData.length}`)
+    historicalData.slice(-5).forEach((day) => {
+      writeWrappedText(`- ${day.date}: Close ${formatCurrency(day.close)} | Volume ${day.volume?.toLocaleString() ?? 'N/A'}`, 10)
+    })
+  }
   if (reportType === "general") {
     writeWrappedText("General Summary", 14, "bold")
     writeWrappedText(
