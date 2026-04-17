@@ -21,11 +21,23 @@ export function DataScientistDashboard({ stockAnalysis }: DataScientistDashboard
   }
 
   const handleDownloadData = (format: string) => {
-    // In a real app, this would generate and download data in the specified format
-    const data = format === "CSV" ? convertToCSV(historicalData) : JSON.stringify(historicalData, null, 2)
+    if (!historicalData || historicalData.length === 0) {
+      alert("No historical data available to download.");
+      return;
+    }
 
-    console.log(`Downloading ${format} data:`, data.slice(0, 100) + "...")
-    alert(`${format} data would be downloaded here (${historicalData.length} records)`)
+    const data = format === "CSV" ? convertToCSV(historicalData) : JSON.stringify(historicalData, null, 2)
+    
+    // Create a Blob and trigger an actual browser file download
+    const blob = new Blob([data], { type: format === "CSV" ? "text/csv" : "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `NVDA_historical_data.${format.toLowerCase()}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   // Helper function to convert data to CSV format
