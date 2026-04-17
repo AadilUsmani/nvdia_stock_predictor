@@ -7,6 +7,7 @@ import { Download, TrendingUp, TrendingDown, ArrowUp, ArrowDown } from "lucide-r
 import { StockChart } from "@/components/stock-chart"
 import { APIStatusPanel } from "@/components/api-status-panel"
 import type { StockAnalysis } from "@/hooks/use-stock-data"
+import { generatePDFReport } from "@/lib/pdf-generator"
 
 interface GeneralUserDashboardProps {
   stockAnalysis: StockAnalysis
